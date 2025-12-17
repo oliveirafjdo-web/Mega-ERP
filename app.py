@@ -425,23 +425,23 @@ def importar_vendas_ml(caminho_arquivo, engine: Engine):
         
         with engine.begin() as conn:
             for _, row in df_batch.iterrows():
-            sku = str(row.get("SKU") or "").strip()
-            titulo = str(row.get("Título do anúncio") or "").strip()
+                sku = str(row.get("SKU") or "").strip()
+                titulo = str(row.get("Título do anúncio") or "").strip()
 
-            produto_row = None
+                produto_row = None
 
-            if sku:
-                produto_row = conn.execute(
-                    select(produtos.c.id, produtos.c.custo_unitario)
-                    .where(produtos.c.sku == sku)
-                ).mappings().first()
-            else:
-                # tenta pelo nome do produto = título do anúncio
-                if titulo:
+                if sku:
                     produto_row = conn.execute(
                         select(produtos.c.id, produtos.c.custo_unitario)
-                        .where(produtos.c.nome == titulo)
+                        .where(produtos.c.sku == sku)
                     ).mappings().first()
+                else:
+                    # tenta pelo nome do produto = título do anúncio
+                    if titulo:
+                        produto_row = conn.execute(
+                            select(produtos.c.id, produtos.c.custo_unitario)
+                            .where(produtos.c.nome == titulo)
+                        ).mappings().first()
 
             if not sku and not produto_row:
                 vendas_sem_sku += 1
@@ -501,50 +501,50 @@ def importar_vendas_ml(caminho_arquivo, engine: Engine):
                             estado = None
                     break
 
-            conn.execute(
-                insert(vendas).values(
-                    produto_id=produto_id,
-                    data_venda=data_venda.isoformat() if data_venda else None,
-                    quantidade=unidades,
-                    preco_venda_unitario=preco_medio_venda,
-                    receita_total=receita_total,
-                    comissao_ml=comissao_ml,
-                    custo_total=custo_total,
-                    margem_contribuicao=margem_contribuicao,
-                    origem="Mercado Livre",
-                    numero_venda_ml=numero_venda_ml,
-                    lote_importacao=lote_id,
-                    estado=estado,
-                )
-            )
-
-            # --- Insere lançamento financeiro no caixa Mercado Pago (valor líquido) ---
-            try:
-                external_id = str(numero_venda_ml) if numero_venda_ml else None
-                already = None
-                if external_id:
-                    already = conn.execute(
-                        select(finance_transactions.c.id)
-                        .where(finance_transactions.c.external_id_mp == external_id)
-                        .where(finance_transactions.c.tipo == 'MP_NET')
-                    ).mappings().first()
-
-                if not already:
-                    valor_liquido = float(receita_total or 0.0) - float(comissao_ml or 0.0)
-                    conn.execute(
-                        insert(finance_transactions).values(
-                            data_lancamento=(data_venda.isoformat() if data_venda else None),
-                            tipo="MP_NET",
-                            valor=valor_liquido,
-                            origem="mercado_pago",
-                            external_id_mp=external_id,
-                            descricao=f"Venda ML {external_id}",
-                            criado_em=datetime.now().isoformat(timespec="seconds"),
-                            lote_importacao=lote_id,
-                        )
+                conn.execute(
+                    insert(vendas).values(
+                        produto_id=produto_id,
+                        data_venda=data_venda.isoformat() if data_venda else None,
+                        quantidade=unidades,
+                        preco_venda_unitario=preco_medio_venda,
+                        receita_total=receita_total,
+                        comissao_ml=comissao_ml,
+                        custo_total=custo_total,
+                        margem_contribuicao=margem_contribuicao,
+                        origem="Mercado Livre",
+                        numero_venda_ml=numero_venda_ml,
+                        lote_importacao=lote_id,
+                        estado=estado,
                     )
-            except Exception as e:
-                print(f"Erro ao inserir transação financeira para venda {numero_venda_ml}: {e}")
+                )
+
+                # --- Insere lançamento financeiro no caixa Mercado Pago (valor líquido) ---
+                try:
+                    external_id = str(numero_venda_ml) if numero_venda_ml else None
+                    already = None
+                    if external_id:
+                        already = conn.execute(
+                            select(finance_transactions.c.id)
+                            .where(finance_transactions.c.external_id_mp == external_id)
+                            .where(finance_transactions.c.tipo == 'MP_NET')
+                        ).mappings().first()
+
+                    if not already:
+                        valor_liquido = float(receita_total or 0.0) - float(comissao_ml or 0.0)
+                        conn.execute(
+                            insert(finance_transactions).values(
+                                data_lancamento=(data_venda.isoformat() if data_venda else None),
+                                tipo="MP_NET",
+                                valor=valor_liquido,
+                                origem="mercado_pago",
+                                external_id_mp=external_id,
+                                descricao=f"Venda ML {external_id}",
+                                criado_em=datetime.now().isoformat(timespec="seconds"),
+                                lote_importacao=lote_id,
+                            )
+                        )
+                except Exception as e:
+                    print(f"Erro ao inserir transação financeira para venda {numero_venda_ml}: {e}")
 
                 conn.execute(
                     update(produtos)
@@ -602,46 +602,46 @@ def importar_produtos_excel(caminho_arquivo, engine: Engine):
         
         with engine.begin() as conn:
             for _, row in df_batch.iterrows():
-            sku = str(row.get("SKU") or "").strip()
-            if not sku:
-                erros.append("Linha sem SKU")
-                continue
+                sku = str(row.get("SKU") or "").strip()
+                if not sku:
+                    erros.append("Linha sem SKU")
+                    continue
 
-            nome = str(row.get("Nome") or "").strip() or sku  # default to SKU if no name
-            estoque = row.get("Estoque")
-            try:
-                estoque = int(estoque) if estoque == estoque else 0
-            except Exception:
-                estoque = 0
+                nome = str(row.get("Nome") or "").strip() or sku  # default to SKU if no name
+                estoque = row.get("Estoque")
+                try:
+                    estoque = int(estoque) if estoque == estoque else 0
+                except Exception:
+                    estoque = 0
 
-            custo = row.get("Custo")
-            try:
-                custo = float(custo) if custo == custo else 0.0
-            except Exception:
-                custo = 0.0
+                custo = row.get("Custo")
+                try:
+                    custo = float(custo) if custo == custo else 0.0
+                except Exception:
+                    custo = 0.0
 
-            
-            # check if product exists
-            produto_row = conn.execute(
-                select(produtos.c.id, produtos.c.estoque_atual)
-                .where(produtos.c.sku == sku)
-            ).mappings().first()
+                
+                # check if product exists
+                produto_row = conn.execute(
+                    select(produtos.c.id, produtos.c.estoque_atual)
+                    .where(produtos.c.sku == sku)
+                ).mappings().first()
 
-            if produto_row:
-                # update
-                conn.execute(
-                    update(produtos)
-                    .where(produtos.c.id == produto_row["id"])
-                    .values(
-                        nome=nome,
-                        custo_unitario=custo,
-                        estoque_atual=estoque,
+                if produto_row:
+                    # update
+                    conn.execute(
+                        update(produtos)
+                        .where(produtos.c.id == produto_row["id"])
+                        .values(
+                            nome=nome,
+                            custo_unitario=custo,
+                            estoque_atual=estoque,
+                        )
                     )
-                )
-                produtos_atualizados += 1
-            else:
-                # insert
-                conn.execute(
+                    produtos_atualizados += 1
+                else:
+                    # insert
+                    conn.execute(
                         insert(produtos).values(
                             nome=nome,
                             sku=sku,

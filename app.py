@@ -388,35 +388,43 @@ def normalize_df_uf(df):
 def importar_vendas_ml(caminho_arquivo, engine: Engine):
     lote_id = datetime.now().isoformat(timespec="seconds")
 
+    # OTIMIZAÇÃO: Ler apenas primeiras 1000 linhas para limitar memória
+    # Renderização Free (512MB) não suporta arquivos muito grandes
+    MAX_ROWS = 1000
+    
     df = pd.read_excel(
         caminho_arquivo,
         sheet_name="Vendas BR",
-        header=5
+        header=5,
+        nrows=MAX_ROWS  # Limitar linhas lidas
     )
     if "N.º de venda" not in df.columns:
         raise ValueError("Planilha não está no formato esperado: coluna 'N.º de venda' não encontrada.")
 
-    print("Colunas encontradas:", list(df.columns))
+    print(f"Colunas encontradas: {len(df.columns)} colunas")
+    print(f"Linhas lidas: {len(df)} (máximo: {MAX_ROWS})")
 
     df = df[df["N.º de venda"].notna()]
     
-    # normaliza coluna UF se existir
+    # normaliza coluna UF se existir (sem salvar relatório para economizar I/O)
     uf_col, not_rec = normalize_df_uf(df)
     if uf_col and not_rec:
-        # salva relatório de valores não reconhecidos
-        try:
-            rpt_path = os.path.join(app.config["UPLOAD_FOLDER"], f"uf_not_recognized_settlement_{lote_id}.csv")
-            pd.DataFrame([{'original': o, 'converted': c} for o, c in not_rec]).to_csv(rpt_path, index=False)
-            print(f"Relatório UF não reconhecidos salvo em: {rpt_path}")
-        except Exception:
-            print("Falha ao salvar relatório de UF não reconhecidos.")
+        print(f"⚠️ {len(not_rec)} UFs não reconhecidos (ignorados para economizar memória)")
 
     vendas_importadas = 0
     vendas_sem_sku = 0
     vendas_sem_produto = 0
-
-    with engine.begin() as conn:
-        for _, row in df.iterrows():
+    
+    # OTIMIZAÇÃO: Processar em lotes menores de 50 linhas
+    BATCH_SIZE = 50
+    total_rows = len(df)
+    
+    for batch_start in range(0, total_rows, BATCH_SIZE):
+        batch_end = min(batch_start + BATCH_SIZE, total_rows)
+        df_batch = df.iloc[batch_start:batch_end]
+        
+        with engine.begin() as conn:
+            for _, row in df_batch.iterrows():
             sku = str(row.get("SKU") or "").strip()
             titulo = str(row.get("Título do anúncio") or "").strip()
 
@@ -538,13 +546,20 @@ def importar_vendas_ml(caminho_arquivo, engine: Engine):
             except Exception as e:
                 print(f"Erro ao inserir transação financeira para venda {numero_venda_ml}: {e}")
 
-            conn.execute(
-                update(produtos)
-                .where(produtos.c.id == produto_id)
-                .values(estoque_atual=produtos.c.estoque_atual - unidades)
-            )
+                conn.execute(
+                    update(produtos)
+                    .where(produtos.c.id == produto_id)
+                    .values(estoque_atual=produtos.c.estoque_atual - unidades)
+                )
 
-            vendas_importadas += 1
+                vendas_importadas += 1
+        
+        # Liberar memória após cada lote
+        import gc
+        gc.collect()
+        
+        if (batch_end % 100) == 0:
+            print(f"Processadas {batch_end}/{total_rows} vendas...")
 
     return {
         "lote_id": lote_id,
@@ -558,15 +573,15 @@ def importar_vendas_ml(caminho_arquivo, engine: Engine):
 # Importação de produtos via Excel
 # --------------------------------------------------------------------
 def importar_produtos_excel(caminho_arquivo, engine: Engine):
-    df = pd.read_excel(caminho_arquivo, header=0)  # assume header in first row
+    # OTIMIZAÇÃO: Limitar linhas para economizar memória
+    MAX_ROWS = 500
+    df = pd.read_excel(caminho_arquivo, header=0, nrows=MAX_ROWS)
 
-    # normaliza coluna UF se houver (algumas planilhas de produtos podem conter UF)
+    # normaliza coluna UF se houver (sem salvar relatório)
     try:
         uf_col, not_rec = normalize_df_uf(df)
         if uf_col and not_rec:
-            rpt = str(caminho_arquivo).replace('.xlsx', '_uf_not_recognized.csv')
-            pd.DataFrame([{'original': o, 'converted': c} for o, c in not_rec]).to_csv(rpt, index=False)
-            print(f"Relatório UF não reconhecidos salvo em: {rpt}")
+            print(f"⚠️ {len(not_rec)} UFs não reconhecidos (ignorados)")
     except Exception:
         pass
 
@@ -576,9 +591,17 @@ def importar_produtos_excel(caminho_arquivo, engine: Engine):
     produtos_importados = 0
     produtos_atualizados = 0
     erros = []
-
-    with engine.begin() as conn:
-        for _, row in df.iterrows():
+    
+    # OTIMIZAÇÃO: Processar em lotes pequenos
+    BATCH_SIZE = 50
+    total_rows = len(df)
+    
+    for batch_start in range(0, total_rows, BATCH_SIZE):
+        batch_end = min(batch_start + BATCH_SIZE, total_rows)
+        df_batch = df.iloc[batch_start:batch_end]
+        
+        with engine.begin() as conn:
+            for _, row in df_batch.iterrows():
             sku = str(row.get("SKU") or "").strip()
             if not sku:
                 erros.append("Linha sem SKU")
@@ -619,16 +642,20 @@ def importar_produtos_excel(caminho_arquivo, engine: Engine):
             else:
                 # insert
                 conn.execute(
-                    insert(produtos).values(
-                        nome=nome,
-                        sku=sku,
-                        custo_unitario=custo,
-                        preco_venda_sugerido=custo * 1.5,  # default markup
-                        estoque_inicial=estoque,
-                        estoque_atual=estoque,
+                        insert(produtos).values(
+                            nome=nome,
+                            sku=sku,
+                            custo_unitario=custo,
+                            preco_venda_sugerido=custo * 1.5,  # default markup
+                            estoque_inicial=estoque,
+                            estoque_atual=estoque,
+                        )
                     )
-                )
-                produtos_importados += 1
+                    produtos_importados += 1
+        
+        # Liberar memória após cada lote
+        import gc
+        gc.collect()
 
     return {
         "produtos_importados": produtos_importados,

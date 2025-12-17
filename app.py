@@ -412,11 +412,11 @@ def importar_vendas_ml(caminho_arquivo, engine: Engine):
     vendas_sem_sku = 0
     vendas_sem_produto = 0
     
-    # OTIMIZAÇÃO: Lotes grandes (100) para completar em < 5min (limite Render Free)
-    BATCH_SIZE = 100
+    # OTIMIZAÇÃO EXTREMA: Lotes de 200 para velocidade máxima
+    BATCH_SIZE = 200
     total_rows = len(df)
     
-    print(f"📦 {total_rows} vendas - processando em alta velocidade...")
+    print(f"⚡ Importando {total_rows} vendas...")
     
     for batch_start in range(0, total_rows, BATCH_SIZE):
         batch_end = min(batch_start + BATCH_SIZE, total_rows)
@@ -517,33 +517,8 @@ continue
                     )
                 )
 
-                # --- Insere lançamento financeiro no caixa Mercado Pago (valor líquido) ---
-                try:
-                    external_id = str(numero_venda_ml) if numero_venda_ml else None
-                    already = None
-                    if external_id:
-                        already = conn.execute(
-                            select(finance_transactions.c.id)
-                            .where(finance_transactions.c.external_id_mp == external_id)
-                            .where(finance_transactions.c.tipo == 'MP_NET')
-                        ).mappings().first()
-
-                    if not already:
-                        valor_liquido = float(receita_total or 0.0) - float(comissao_ml or 0.0)
-                        conn.execute(
-                            insert(finance_transactions).values(
-                                data_lancamento=(data_venda.isoformat() if data_venda else None),
-                                tipo="MP_NET",
-                                valor=valor_liquido,
-                                origem="mercado_pago",
-                                external_id_mp=external_id,
-                                descricao=f"Venda ML {external_id}",
-                                criado_em=datetime.now().isoformat(timespec="seconds"),
-                                lote_importacao=lote_id,
-                            )
-                        )
-                except Exception as e:
-                    print(f"Erro ao inserir transação financeira para venda {numero_venda_ml}: {e}")
+                # Transações financeiras desabilitadas temporariamente para velocidade
+                # (podem ser adicionadas depois via script separado se necessário)
 
                 conn.execute(
                     update(produtos)

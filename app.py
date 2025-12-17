@@ -1075,11 +1075,12 @@ def lista_vendas():
                 pizza_produtos_valores.append(float(r["total_receita"] or 0))
 
     # =======================
-    # GRÁFICOS 30 DIAS (FATURAMENTO / QTD / LUCRO)
+    # GRÁFICOS 30 DIAS (FATURAMENTO / QTD / LUCRO / RECEITA LÍQUIDA)
     # =======================
     faturamento_dia = {}
     quantidade_dia = {}
     lucro_dia = {}
+    receita_liquida_dia = {}  # NOVO: receita bruta - comissão ML
 
     for v in vendas_all:
         if not v["data_venda"]:
@@ -1094,13 +1095,19 @@ def lista_vendas():
         margem = float(v["margem_contribuicao"] or 0)
         qtd = float(v["quantidade"] or 0)
 
-        # lucro líquido do dia (mesma lógica do dashboard)
+        # comissão ML: receita - custo - margem
         comissao_ml = max(0.0, (receita - custo) - margem)
+        
+        # NOVO: receita líquida = receita bruta - comissão ML
+        receita_liquida = receita - comissao_ml
+        
+        # lucro líquido do dia
         lucro = receita - custo - comissao_ml
 
         faturamento_dia[dt] = faturamento_dia.get(dt, 0) + receita
         quantidade_dia[dt] = quantidade_dia.get(dt, 0) + qtd
         lucro_dia[dt] = lucro_dia.get(dt, 0) + lucro
+        receita_liquida_dia[dt] = receita_liquida_dia.get(dt, 0) + receita_liquida  # NOVO
 
     # Últimos 30 dias ordenados
     dias = [hoje - timedelta(days=i) for i in range(29, -1, -1)]
@@ -1108,6 +1115,7 @@ def lista_vendas():
     grafico_faturamento = [faturamento_dia.get(d, 0) for d in dias]
     grafico_quantidade = [quantidade_dia.get(d, 0) for d in dias]
     grafico_lucro = [lucro_dia.get(d, 0) for d in dias]
+    grafico_receita_liquida = [receita_liquida_dia.get(d, 0) for d in dias]  # NOVO
 
     # =========================
     # COMPARATIVO MÊS ATUAL x MÊS ANTERIOR
@@ -1219,6 +1227,7 @@ def lista_vendas():
         grafico_faturamento=grafico_faturamento,
         grafico_quantidade=grafico_quantidade,
         grafico_lucro=grafico_lucro,
+        grafico_receita_liquida=grafico_receita_liquida,  # NOVO
         grafico_cmp_labels=grafico_cmp_labels,
         grafico_cmp_atual=grafico_cmp_atual,
         grafico_cmp_anterior=grafico_cmp_anterior,

@@ -92,6 +92,15 @@
 
         <div class="col-md-6">
             <div class="card shadow-sm">
+                <div class="card-header">Receita Líquida Diária (Receita - Comissão ML)</div>
+                <div class="card-body">
+                    <canvas id="chartReceitaLiquida" style="height:260px;"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card shadow-sm">
                 <div class="card-header">Comparativo: Mês atual x Mês anterior</div>
                 <div class="card-body">
                     <canvas id="chartComparativo" style="height:260px;"></canvas>
@@ -234,6 +243,7 @@ const labels = {{ grafico_labels|tojson }};
 const dadosFaturamento = {{ grafico_faturamento|tojson }};
 const dadosQuantidade = {{ grafico_quantidade|tojson }};
 const dadosLucro = {{ grafico_lucro|tojson }};
+const dadosReceitaLiquida = {{ grafico_receita_liquida|tojson }};  // NOVO
 const labelsCmp = {{ grafico_cmp_labels|tojson }};
 const dadosAtual = {{ grafico_cmp_atual|tojson }};
 const dadosAnterior = {{ grafico_cmp_anterior|tojson }};
@@ -314,6 +324,22 @@ new Chart(document.getElementById("chartLucro"), {
             fill: true,
             tension: 0.3,
             pointRadius: 4
+        }]
+    },
+    options: baseConfig
+});
+
+// NOVO: Gráfico de Receita Líquida Diária
+new Chart(document.getElementById("chartReceitaLiquida"), {
+    type: "bar",
+    data: {
+        labels,
+        datasets: [{
+            label: "Receita Líquida (R$)",
+            data: dadosReceitaLiquida,
+            backgroundColor: "#9b59b6",
+            borderColor: "#8e44ad",
+            borderWidth: 2
         }]
     },
     options: baseConfig

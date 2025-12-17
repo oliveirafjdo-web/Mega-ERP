@@ -388,35 +388,69 @@ def normalize_df_uf(df):
 def importar_vendas_ml(caminho_arquivo, engine: Engine):
     lote_id = datetime.now().isoformat(timespec="seconds")
 
-    # OTIMIZAÇÃO: Aumentado para 5000 vendas com processamento em lotes pequenos
-    # Render Free (512MB) suporta até ~5000 vendas se processar em lotes de 20
-    MAX_ROWS = 5000
+    # OTIMIZAÇÃO EXTREMA: Processar arquivo em chunks de 500 linhas para não sobrecarregar memória
+    # Render Free tem apenas 512MB de RAM
+    CHUNK_SIZE = 500
     
-    df = pd.read_excel(
+    print(f"⚡ Iniciando importação em chunks de {CHUNK_SIZE} vendas...")
+    
+    # Ler o arquivo em pedaços pequenos para economizar memória
+    vendas_importadas = 0
+    vendas_sem_sku = 0
+    vendas_sem_produto = 0
+    chunk_num = 0
+    
+    # Processar arquivo Excel em chunks
+    for df_chunk in pd.read_excel(
         caminho_arquivo,
         sheet_name="Vendas BR",
         header=5,
-        nrows=MAX_ROWS  # Limitar linhas lidas
-    )
-    
-    if "N.º de venda" not in df.columns:
-        raise ValueError(f"Planilha não está no formato esperado. Colunas disponíveis: {list(df.columns)[:20]}")
+        chunksize=CHUNK_SIZE
+    ):
+        chunk_num += 1
+        
+        if "N.º de venda" not in df_chunk.columns:
+            raise ValueError(f"Planilha não está no formato esperado")
 
-    df = df[df["N.º de venda"].notna()]
-    print(f"📦 Processando {len(df)} vendas...")
+        df_chunk = df_chunk[df_chunk["N.º de venda"].notna()]
+        
+        if len(df_chunk) == 0:
+            continue
+        
+        # normaliza coluna UF (silencioso)
+        uf_col, not_rec = normalize_df_uf(df_chunk)
+        
+        # Processar este chunk
+        result = _processar_chunk_vendas_ml(df_chunk, engine, lote_id)
+        vendas_importadas += result['importadas']
+        vendas_sem_sku += result['sem_sku']
+        vendas_sem_produto += result['sem_produto']
+        
+        print(f"✓ Chunk {chunk_num}: +{result['importadas']} vendas (total: {vendas_importadas})")
+        
+        # Limpar memória
+        del df_chunk
+        import gc
+        gc.collect()
     
-    # normaliza coluna UF se existir (silencioso para performance)
-    uf_col, not_rec = normalize_df_uf(df)
+    return {
+        "lote_id": lote_id,
+        "vendas_importadas": vendas_importadas,
+        "vendas_sem_sku": vendas_sem_sku,
+        "vendas_sem_produto": vendas_sem_produto,
+    }
+
+
+def _processar_chunk_vendas_ml(df, engine: Engine, lote_id: str):
+    """Processa um chunk de vendas ML"""
 
     vendas_importadas = 0
     vendas_sem_sku = 0
     vendas_sem_produto = 0
     
-    # OTIMIZAÇÃO EXTREMA: Lotes de 200 para velocidade máxima
-    BATCH_SIZE = 200
+    # Processar todas as linhas do chunk em um único lote
+    BATCH_SIZE = len(df)
     total_rows = len(df)
-    
-    print(f"⚡ Importando {total_rows} vendas...")
     
     for batch_start in range(0, total_rows, BATCH_SIZE):
         batch_end = min(batch_start + BATCH_SIZE, total_rows)

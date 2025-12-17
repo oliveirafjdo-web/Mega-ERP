@@ -19,6 +19,10 @@ instance/
 metrifiy.db.bak*
 *.sqbpro
 
+# Data exports (too large for git, use alternative method)
+# Uncomment the line below if you want to exclude data_export.json
+# data_export.json
+
 # Uploads
 uploads/
 !uploads/.gitkeep

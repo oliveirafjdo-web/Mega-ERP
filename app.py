@@ -390,7 +390,7 @@ def importar_vendas_ml(caminho_arquivo, engine: Engine):
 
     # OTIMIZAÇÃO EXTREMA: Processar arquivo em chunks de 500 linhas para não sobrecarregar memória
     # Render Free tem apenas 512MB de RAM
-    CHUNK_SIZE = 500
+    CHUNK_SIZE = 1000
     
     print(f"⚡ Iniciando importação em chunks de {CHUNK_SIZE} vendas...")
     
@@ -479,12 +479,12 @@ def _processar_chunk_vendas_ml(df, engine: Engine, lote_id: str):
 
                 if not sku and not produto_row:
                     vendas_sem_sku += 1
-                    print(f"⚠️ Venda sem SKU/produto: {titulo[:50] if titulo else 'sem título'}")
                     continue
-continue
 
                 if not produto_row:
                     vendas_sem_produto += 1
+                    continue
+
                 produto_id = produto_row["id"]
                 custo_unitario = float(produto_row["custo_unitario"] or 0.0)
 
@@ -562,17 +562,11 @@ continue
                 )
 
                 vendas_importadas += 1
-        
-        # Progresso a cada 1000 vendas
-        if (batch_end % 1000) == 0 or batch_end == total_rows:
-            print(f"✓ {batch_end}/{total_rows}")
-        
-        # Limpeza de memória só a cada 500 vendas
-        if (batch_end % 500) == 0:
-            import gc
-            gc.collect()
-        "vendas_sem_sku": vendas_sem_sku,
-        "vendas_sem_produto": vendas_sem_produto,
+    
+    return {
+        "importadas": vendas_importadas,
+        "sem_sku": vendas_sem_sku,
+        "sem_produto": vendas_sem_produto,
     }
 
 

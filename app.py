@@ -449,63 +449,65 @@ def importar_vendas_ml(caminho_arquivo, engine: Engine):
                             .where(produtos.c.nome == titulo)
                         ).mappings().first()
 
-            if not sku and not produto_row:
-                vendas_sem_sku += 1
+                if not sku and not produto_row:
+                    vendas_sem_sku += 1
                     print(f"⚠️ Venda sem SKU/produto: {titulo[:50] if titulo else 'sem título'}")
                     continue
 
                 if not produto_row:
                     vendas_sem_produto += 1
                     print(f"⚠️ Produto não cadastrado - SKU: {sku}")
-            produto_id = produto_row["id"]
-            custo_unitario = float(produto_row["custo_unitario"] or 0.0)
+                    continue
 
-            data_venda_raw = row.get("Data da venda")
-            data_venda = parse_data_venda(data_venda_raw)
-            unidades = row.get("Unidades")
-            try:
-                unidades = int(unidades) if unidades == unidades else 0
-            except Exception:
-                unidades = 0
+                produto_id = produto_row["id"]
+                custo_unitario = float(produto_row["custo_unitario"] or 0.0)
 
-            # Coluna H: Receita por produtos (BRL) - valor bruto da venda
-            receita_bruta = row.get("Receita por produtos (BRL)")
-            try:
-                receita_total = float(receita_bruta) if receita_bruta == receita_bruta else 0.0
-            except Exception:
-                receita_total = 0.0
+                data_venda_raw = row.get("Data da venda")
+                data_venda = parse_data_venda(data_venda_raw)
+                unidades = row.get("Unidades")
+                try:
+                    unidades = int(unidades) if unidades == unidades else 0
+                except Exception:
+                    unidades = 0
 
-            preco_medio_venda = receita_total / unidades if unidades > 0 else 0.0
-            custo_total = custo_unitario * unidades
+                # Coluna H: Receita por produtos (BRL) - valor bruto da venda
+                receita_bruta = row.get("Receita por produtos (BRL)")
+                try:
+                    receita_total = float(receita_bruta) if receita_bruta == receita_bruta else 0.0
+                except Exception:
+                    receita_total = 0.0
 
-            # Comissão Mercado Livre a partir da coluna 'Tarifa de venda e impostos (BRL)'
-            tarifa = row.get("Tarifa de venda e impostos (BRL)")
-            try:
-                comissao_ml = float(tarifa) if tarifa == tarifa else 0.0
-            except Exception:
-                comissao_ml = 0.0
-            if comissao_ml < 0:
-                comissao_ml = -comissao_ml
+                preco_medio_venda = receita_total / unidades if unidades > 0 else 0.0
+                custo_total = custo_unitario * unidades
 
-            margem_contribuicao = receita_total - custo_total - comissao_ml
-            numero_venda_ml = str(row.get("N.º de venda"))
-            estado = None
-            # Coluna AL (Estado.1) tem prioridade
-            for col in ["Estado.1", "UF", "Estado", "Estado do comprador", "Estado do Cliente"]:
-                if col in df.columns and row.get(col):
-                    estado_raw = row.get(col)
-                    sigla = normalize_uf(estado_raw)
-                    if sigla and isinstance(sigla, str) and len(sigla) == 2:
-                        estado = sigla
-                    else:
-                        # fallback: tentar extrair apenas letras e pegar primeiras 2
-                        import re
-                        letters = re.sub(r'[^A-Za-z]', '', str(estado_raw))
-                        if len(letters) >= 2:
-                            estado = letters[:2].upper()
+                # Comissão Mercado Livre a partir da coluna 'Tarifa de venda e impostos (BRL)'
+                tarifa = row.get("Tarifa de venda e impostos (BRL)")
+                try:
+                    comissao_ml = float(tarifa) if tarifa == tarifa else 0.0
+                except Exception:
+                    comissao_ml = 0.0
+                if comissao_ml < 0:
+                    comissao_ml = -comissao_ml
+
+                margem_contribuicao = receita_total - custo_total - comissao_ml
+                numero_venda_ml = str(row.get("N.º de venda"))
+                estado = None
+                # Coluna AL (Estado.1) tem prioridade
+                for col in ["Estado.1", "UF", "Estado", "Estado do comprador", "Estado do Cliente"]:
+                    if col in df.columns and row.get(col):
+                        estado_raw = row.get(col)
+                        sigla = normalize_uf(estado_raw)
+                        if sigla and isinstance(sigla, str) and len(sigla) == 2:
+                            estado = sigla
                         else:
-                            estado = None
-                    break
+                            # fallback: tentar extrair apenas letras e pegar primeiras 2
+                            import re
+                            letters = re.sub(r'[^A-Za-z]', '', str(estado_raw))
+                            if len(letters) >= 2:
+                                estado = letters[:2].upper()
+                            else:
+                                estado = None
+                        break
 
                 conn.execute(
                     insert(vendas).values(

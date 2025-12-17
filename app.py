@@ -442,20 +442,21 @@ def importar_vendas_ml(caminho_arquivo, engine: Engine):
 
 
 def _processar_chunk_vendas_ml(df, engine: Engine, lote_id: str):
-    """Processa um chunk de vendas ML"""
+    """Processa um chunk de vendas ML - com commit após cada chunk para evitar timeout de conexão"""
 
     vendas_importadas = 0
     vendas_sem_sku = 0
     vendas_sem_produto = 0
     
-    # Processar todas as linhas do chunk em um único lote
-    BATCH_SIZE = len(df)
+    # Processar em mini-lotes de 50 vendas para commits frequentes
+    BATCH_SIZE = 50
     total_rows = len(df)
     
     for batch_start in range(0, total_rows, BATCH_SIZE):
         batch_end = min(batch_start + BATCH_SIZE, total_rows)
         df_batch = df.iloc[batch_start:batch_end]
         
+        # Commit após cada mini-lote para não perder conexão com PostgreSQL
         with engine.begin() as conn:
             for _, row in df_batch.iterrows():
                 sku = str(row.get("SKU") or "").strip()

@@ -14,8 +14,8 @@ worker_class = "sync"
 # Threads por worker
 threads = 2
 
-# Timeout mais alto para importação de dados
-timeout = 300
+# Timeout MUITO alto para importação de grandes volumes (até 20 minutos)
+timeout = 1200
 
 # Memória: limitar e reiniciar worker se usar muita memória
 max_requests = 100

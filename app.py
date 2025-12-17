@@ -399,23 +399,14 @@ def importar_vendas_ml(caminho_arquivo, engine: Engine):
         nrows=MAX_ROWS  # Limitar linhas lidas
     )
     
-    print(f"📊 DEBUG - Linhas totais lidas: {len(df)}")
-    print(f"📊 DEBUG - Colunas encontradas ({len(df.columns)}): {list(df.columns)[:10]}")  # Primeiras 10 colunas
-    
     if "N.º de venda" not in df.columns:
-        # Tentar variações do nome da coluna
-        possible_cols = [col for col in df.columns if 'venda' in str(col).lower() or 'pedido' in str(col).lower()]
-        print(f"⚠️ Coluna 'N.º de venda' não encontrada. Colunas similares: {possible_cols}")
         raise ValueError(f"Planilha não está no formato esperado. Colunas disponíveis: {list(df.columns)[:20]}")
 
-    print(f"📊 DEBUG - Linhas antes do filtro: {len(df)}")
     df = df[df["N.º de venda"].notna()]
-    print(f"📊 DEBUG - Linhas após filtrar N.º de venda: {len(df)}")
+    print(f"📦 Processando {len(df)} vendas...")
     
-    # normaliza coluna UF se existir (sem salvar relatório para economizar I/O)
+    # normaliza coluna UF se existir (silencioso para performance)
     uf_col, not_rec = normalize_df_uf(df)
-    if uf_col and not_rec:
-        print(f"⚠️ {len(not_rec)} UFs não reconhecidos (ignorados para economizar memória)")
 
     vendas_importadas = 0
     vendas_sem_sku = 0

@@ -388,9 +388,9 @@ def normalize_df_uf(df):
 def importar_vendas_ml(caminho_arquivo, engine: Engine):
     lote_id = datetime.now().isoformat(timespec="seconds")
 
-    # OTIMIZAÇÃO: Ler apenas primeiras 1000 linhas para limitar memória
-    # Renderização Free (512MB) não suporta arquivos muito grandes
-    MAX_ROWS = 1000
+    # OTIMIZAÇÃO: Aumentado para 5000 vendas com processamento em lotes pequenos
+    # Render Free (512MB) suporta até ~5000 vendas se processar em lotes de 20
+    MAX_ROWS = 5000
     
     df = pd.read_excel(
         caminho_arquivo,
@@ -566,8 +566,9 @@ def importar_vendas_ml(caminho_arquivo, engine: Engine):
         import gc
         gc.collect()
         
-        if (batch_end % 100) == 0:
-            print(f"Processadas {batch_end}/{total_rows} vendas...")
+        # Progresso a cada 10 lotes (200 vendas)
+        if (batch_end % 200) == 0 or batch_end == total_rows:
+            print(f"✓ Processadas {batch_end}/{total_rows} vendas ({(batch_end/total_rows*100):.1f}%)")
 
     return {
         "lote_id": lote_id,

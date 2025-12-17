@@ -500,6 +500,17 @@ def _processar_chunk_vendas_ml(df, engine: Engine, lote_id: str):
                 except Exception:
                     unidades = 0
 
+                # Verificar valor total - se for 0, é venda cancelada
+                total_brl = row.get("Total (BRL)")
+                try:
+                    total_brl = float(total_brl) if total_brl == total_brl else 0.0
+                except Exception:
+                    total_brl = 0.0
+                
+                # Se total é 0, venda cancelada - pular
+                if total_brl == 0.0:
+                    continue
+
                 # Coluna H: Receita por produtos (BRL) - valor bruto da venda
                 receita_bruta = row.get("Receita por produtos (BRL)")
                 try:
@@ -507,6 +518,17 @@ def _processar_chunk_vendas_ml(df, engine: Engine, lote_id: str):
                 except Exception:
                     receita_total = 0.0
 
+                # Se tem quantidade mas receita zerada, buscar preço médio do produto
+                if unidades > 0 and receita_total == 0.0:
+                    preco_medio_produto = conn.execute(
+                        select(func.avg(vendas.c.preco_venda_unitario))
+                        .where(vendas.c.produto_id == produto_id)
+                        .where(vendas.c.preco_venda_unitario > 0)
+                    ).scalar()
+                    
+                    if preco_medio_produto:
+                        receita_total = float(preco_medio_produto) * unidades
+                
                 preco_medio_venda = receita_total / unidades if unidades > 0 else 0.0
                 custo_total = custo_unitario * unidades
 
@@ -518,6 +540,20 @@ def _processar_chunk_vendas_ml(df, engine: Engine, lote_id: str):
                     comissao_ml = 0.0
                 if comissao_ml < 0:
                     comissao_ml = -comissao_ml
+                
+                # Se comissão zerada mas tem receita, calcular comissão média (aproximadamente 15%)
+                if comissao_ml == 0.0 and receita_total > 0.0:
+                    comissao_media = conn.execute(
+                        select(func.avg(vendas.c.comissao_ml))
+                        .where(vendas.c.produto_id == produto_id)
+                        .where(vendas.c.comissao_ml > 0)
+                    ).scalar()
+                    
+                    if comissao_media:
+                        comissao_ml = float(comissao_media)
+                    else:
+                        # Fallback: 15% do valor de venda
+                        comissao_ml = receita_total * 0.15
 
                 margem_contribuicao = receita_total - custo_total - comissao_ml
                 numero_venda_ml = str(row.get("N.º de venda"))

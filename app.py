@@ -390,7 +390,7 @@ def importar_vendas_ml(caminho_arquivo, engine: Engine):
 
     # OTIMIZAÇÃO EXTREMA: Processar arquivo em chunks de 500 linhas para não sobrecarregar memória
     # Render Free tem apenas 512MB de RAM
-    CHUNK_SIZE = 1000
+    CHUNK_SIZE = 1500
     
     print(f"⚡ Iniciando importação em chunks de {CHUNK_SIZE} vendas...")
     

@@ -971,6 +971,7 @@ def lista_vendas():
     faturamento_dia = {}
     quantidade_dia = {}
     lucro_dia = {}
+    receita_liquida_dia = {}
 
     for v in vendas_all:
         if not v["data_venda"]:
@@ -992,6 +993,7 @@ def lista_vendas():
         faturamento_dia[dt] = faturamento_dia.get(dt, 0) + receita
         quantidade_dia[dt] = quantidade_dia.get(dt, 0) + qtd
         lucro_dia[dt] = lucro_dia.get(dt, 0) + lucro
+        receita_liquida_dia[dt] = receita_liquida_dia.get(dt, 0) + (receita - comissao_ml)
 
     # Últimos 30 dias ordenados
     dias = [hoje - timedelta(days=i) for i in range(29, -1, -1)]
@@ -999,6 +1001,7 @@ def lista_vendas():
     grafico_faturamento = [faturamento_dia.get(d, 0) for d in dias]
     grafico_quantidade = [quantidade_dia.get(d, 0) for d in dias]
     grafico_lucro = [lucro_dia.get(d, 0) for d in dias]
+    grafico_receita_liquida = [receita_liquida_dia.get(d, 0) for d in dias]
 
     # =========================
     # COMPARATIVO MÊS ATUAL x MÊS ANTERIOR
@@ -1095,6 +1098,7 @@ def lista_vendas():
         grafico_faturamento=grafico_faturamento,
         grafico_quantidade=grafico_quantidade,
         grafico_lucro=grafico_lucro,
+        grafico_receita_liquida=grafico_receita_liquida,
         grafico_cmp_labels=grafico_cmp_labels,
         grafico_cmp_atual=grafico_cmp_atual,
         grafico_cmp_anterior=grafico_cmp_anterior,

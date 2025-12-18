@@ -2478,21 +2478,22 @@ def ml_sincronizar():
         config = get_ml_config()
         user_id = config['user_id']
         
-        # Buscar vendas do período
+        # Buscar vendas do período (OTIMIZADO para Render Free - 512MB)
         url = f"https://api.mercadolibre.com/orders/search"
         params = {
             'seller': user_id,
             'order.date_created.from': f"{data_inicio}T00:00:00.000-00:00",
             'order.date_created.to': f"{data_fim}T23:59:59.999-00:00",
-            'limit': 50,
+            'limit': 10,  # Reduzido para economizar memória
         }
         headers = {'Authorization': f'Bearer {access_token}'}
         
         vendas_importadas = 0
         vendas_sem_produto = 0
         offset = 0
+        MAX_VENDAS = 500  # Limite máximo para não estourar memória
         
-        while True:
+        while vendas_importadas < MAX_VENDAS:
             params['offset'] = offset
             response = requests.get(url, params=params, headers=headers)
             
@@ -2506,9 +2507,12 @@ def ml_sincronizar():
             if not orders:
                 break
             
-            # Processar cada venda
-            with engine.begin() as conn:
-                for order in orders:
+            # Processar cada venda com commit imediato
+            for order in orders:
+                if vendas_importadas >= MAX_VENDAS:
+                    break
+                    
+                with engine.begin() as conn:
                     for item in order.get('order_items', []):
                         sku = item['item'].get('seller_custom_field')
                         titulo = item['item']['title']
@@ -2572,11 +2576,18 @@ def ml_sincronizar():
                         )
                         
                         vendas_importadas += 1
+                
+                # Limpar memória após cada venda
+                import gc
+                gc.collect()
             
             # Próxima página
-            if len(orders) < 50:
+            if len(orders) < 10:
                 break
-            offset += 50
+            offset += 10
+            
+            # Feedback de progresso
+            print(f"API ML: {vendas_importadas} vendas importadas...")
         
         flash(f"✅ Sincronizado! {vendas_importadas} vendas importadas, {vendas_sem_produto} sem produto", "success")
         return redirect(url_for("lista_vendas"))

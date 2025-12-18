@@ -195,6 +195,12 @@ configuracoes = Table(
     Column("id", Integer, primary_key=True),
     Column("imposto_percent", Float, nullable=False, server_default="0"),
     Column("despesas_percent", Float, nullable=False, server_default="0"),
+    Column("ml_client_id", String(255)),
+    Column("ml_client_secret", String(255)),
+    Column("ml_access_token", String(500)),
+    Column("ml_refresh_token", String(500)),
+    Column("ml_token_expira", String(50)),
+    Column("ml_user_id", String(100)),
 )
 
 finance_transactions = Table(
@@ -2247,6 +2253,310 @@ def limpar_dados():
     
     # GET - mostrar página de confirmação
     return render_template("limpar_dados.html")
+
+
+# ============================================================
+# INTEGRAÇÃO MERCADO LIVRE - API
+# ============================================================
+
+def get_ml_config():
+    """Retorna configurações do Mercado Livre"""
+    with engine.connect() as conn:
+        config = conn.execute(select(configuracoes)).mappings().first()
+        if config:
+            return {
+                'client_id': config.get('ml_client_id'),
+                'client_secret': config.get('ml_client_secret'),
+                'access_token': config.get('ml_access_token'),
+                'refresh_token': config.get('ml_refresh_token'),
+                'token_expira': config.get('ml_token_expira'),
+                'user_id': config.get('ml_user_id'),
+            }
+    return None
+
+def save_ml_tokens(access_token, refresh_token, expires_in, user_id):
+    """Salva tokens do ML no banco"""
+    expira_em = datetime.now() + timedelta(seconds=expires_in)
+    with engine.begin() as conn:
+        config = conn.execute(select(configuracoes)).mappings().first()
+        if config:
+            conn.execute(
+                update(configuracoes)
+                .where(configuracoes.c.id == config['id'])
+                .values(
+                    ml_access_token=access_token,
+                    ml_refresh_token=refresh_token,
+                    ml_token_expira=expira_em.isoformat(),
+                    ml_user_id=str(user_id),
+                )
+            )
+
+def refresh_ml_token():
+    """Renova o token de acesso do ML se expirou"""
+    config = get_ml_config()
+    if not config or not config['refresh_token']:
+        return None
+    
+    # Verificar se expirou
+    if config['token_expira']:
+        expira = datetime.fromisoformat(config['token_expira'])
+        if datetime.now() < expira:
+            return config['access_token']  # Ainda válido
+    
+    # Renovar token
+    url = "https://api.mercadolibre.com/oauth/token"
+    data = {
+        'grant_type': 'refresh_token',
+        'client_id': config['client_id'],
+        'client_secret': config['client_secret'],
+        'refresh_token': config['refresh_token'],
+    }
+    
+    response = requests.post(url, data=data)
+    if response.status_code == 200:
+        result = response.json()
+        save_ml_tokens(
+            result['access_token'],
+            result['refresh_token'],
+            result['expires_in'],
+            result['user_id']
+        )
+        return result['access_token']
+    
+    return None
+
+
+@app.route("/ml_configurar", methods=["GET", "POST"])
+@login_required
+def ml_configurar():
+    """Configurar credenciais do Mercado Livre"""
+    if request.method == "POST":
+        client_id = request.form.get("client_id", "").strip()
+        client_secret = request.form.get("client_secret", "").strip()
+        
+        if not client_id or not client_secret:
+            flash("Preencha Client ID e Client Secret", "warning")
+            return redirect(url_for("ml_configurar"))
+        
+        try:
+            with engine.begin() as conn:
+                config = conn.execute(select(configuracoes)).mappings().first()
+                if config:
+                    conn.execute(
+                        update(configuracoes)
+                        .where(configuracoes.c.id == config['id'])
+                        .values(ml_client_id=client_id, ml_client_secret=client_secret)
+                    )
+                else:
+                    conn.execute(
+                        insert(configuracoes).values(
+                            ml_client_id=client_id,
+                            ml_client_secret=client_secret
+                        )
+                    )
+            
+            flash("Credenciais salvas! Agora conecte sua conta.", "success")
+            return redirect(url_for("ml_conectar"))
+            
+        except Exception as e:
+            flash(f"Erro ao salvar: {str(e)}", "danger")
+            return redirect(url_for("ml_configurar"))
+    
+    config = get_ml_config()
+    return render_template("ml_configurar.html", config=config)
+
+
+@app.route("/ml_conectar")
+@login_required
+def ml_conectar():
+    """Redireciona para OAuth do Mercado Livre"""
+    config = get_ml_config()
+    if not config or not config['client_id']:
+        flash("Configure as credenciais primeiro", "warning")
+        return redirect(url_for("ml_configurar"))
+    
+    redirect_uri = url_for("ml_callback", _external=True)
+    auth_url = (
+        f"https://auth.mercadolivre.com.br/authorization?"
+        f"response_type=code&client_id={config['client_id']}&redirect_uri={redirect_uri}"
+    )
+    return redirect(auth_url)
+
+
+@app.route("/ml_callback")
+@login_required
+def ml_callback():
+    """Callback do OAuth do Mercado Livre"""
+    code = request.args.get("code")
+    if not code:
+        flash("Autorização cancelada", "warning")
+        return redirect(url_for("ml_configurar"))
+    
+    config = get_ml_config()
+    redirect_uri = url_for("ml_callback", _external=True)
+    
+    # Trocar código por access token
+    url = "https://api.mercadolibre.com/oauth/token"
+    data = {
+        'grant_type': 'authorization_code',
+        'client_id': config['client_id'],
+        'client_secret': config['client_secret'],
+        'code': code,
+        'redirect_uri': redirect_uri,
+    }
+    
+    response = requests.post(url, data=data)
+    if response.status_code == 200:
+        result = response.json()
+        save_ml_tokens(
+            result['access_token'],
+            result['refresh_token'],
+            result['expires_in'],
+            result['user_id']
+        )
+        flash("✅ Conectado com sucesso ao Mercado Livre!", "success")
+        return redirect(url_for("ml_sincronizar_view"))
+    else:
+        flash(f"Erro na autenticação: {response.text}", "danger")
+        return redirect(url_for("ml_configurar"))
+
+
+@app.route("/ml_sincronizar_view")
+@login_required
+def ml_sincronizar_view():
+    """Página para sincronizar vendas do ML"""
+    config = get_ml_config()
+    return render_template("ml_sincronizar.html", config=config)
+
+
+@app.route("/ml_sincronizar", methods=["POST"])
+@login_required
+def ml_sincronizar():
+    """Sincroniza vendas do Mercado Livre via API"""
+    data_inicio = request.form.get("data_inicio")
+    data_fim = request.form.get("data_fim")
+    
+    if not data_inicio or not data_fim:
+        flash("Selecione o período", "warning")
+        return redirect(url_for("ml_sincronizar_view"))
+    
+    try:
+        access_token = refresh_ml_token()
+        if not access_token:
+            flash("Token expirado. Reconecte sua conta.", "danger")
+            return redirect(url_for("ml_conectar"))
+        
+        config = get_ml_config()
+        user_id = config['user_id']
+        
+        # Buscar vendas do período
+        url = f"https://api.mercadolibre.com/orders/search"
+        params = {
+            'seller': user_id,
+            'order.date_created.from': f"{data_inicio}T00:00:00.000-00:00",
+            'order.date_created.to': f"{data_fim}T23:59:59.999-00:00",
+            'limit': 50,
+        }
+        headers = {'Authorization': f'Bearer {access_token}'}
+        
+        vendas_importadas = 0
+        vendas_sem_produto = 0
+        offset = 0
+        
+        while True:
+            params['offset'] = offset
+            response = requests.get(url, params=params, headers=headers)
+            
+            if response.status_code != 200:
+                flash(f"Erro ao buscar vendas: {response.text}", "danger")
+                break
+            
+            data = response.json()
+            orders = data.get('results', [])
+            
+            if not orders:
+                break
+            
+            # Processar cada venda
+            with engine.begin() as conn:
+                for order in orders:
+                    for item in order.get('order_items', []):
+                        sku = item['item'].get('seller_custom_field')
+                        titulo = item['item']['title']
+                        
+                        # Buscar produto
+                        produto_row = None
+                        if sku:
+                            produto_row = conn.execute(
+                                select(produtos.c.id, produtos.c.custo_unitario)
+                                .where(produtos.c.sku == sku)
+                            ).mappings().first()
+                        
+                        if not produto_row and titulo:
+                            produto_row = conn.execute(
+                                select(produtos.c.id, produtos.c.custo_unitario)
+                                .where(produtos.c.nome == titulo)
+                            ).mappings().first()
+                        
+                        if not produto_row:
+                            vendas_sem_produto += 1
+                            continue
+                        
+                        # Extrair dados
+                        produto_id = produto_row['id']
+                        custo_unitario = float(produto_row['custo_unitario'] or 0)
+                        quantidade = item['quantity']
+                        preco_unitario = item['unit_price']
+                        receita_total = item['full_unit_price'] * quantidade
+                        
+                        # Calcular comissão (aproximação 15%)
+                        comissao_ml = receita_total * 0.15
+                        
+                        custo_total = custo_unitario * quantidade
+                        margem = receita_total - custo_total - comissao_ml
+                        
+                        data_venda = order['date_created'][:10]
+                        numero_venda = str(order['id'])
+                        
+                        # Inserir venda
+                        conn.execute(
+                            insert(vendas).values(
+                                produto_id=produto_id,
+                                data_venda=data_venda,
+                                quantidade=quantidade,
+                                preco_venda_unitario=preco_unitario,
+                                receita_total=receita_total,
+                                comissao_ml=comissao_ml,
+                                custo_total=custo_total,
+                                margem_contribuicao=margem,
+                                origem="Mercado Livre API",
+                                numero_venda_ml=numero_venda,
+                                lote_importacao=f"API_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                            )
+                        )
+                        
+                        # Atualizar estoque
+                        conn.execute(
+                            update(produtos)
+                            .where(produtos.c.id == produto_id)
+                            .values(estoque_atual=produtos.c.estoque_atual - quantidade)
+                        )
+                        
+                        vendas_importadas += 1
+            
+            # Próxima página
+            if len(orders) < 50:
+                break
+            offset += 50
+        
+        flash(f"✅ Sincronizado! {vendas_importadas} vendas importadas, {vendas_sem_produto} sem produto", "success")
+        return redirect(url_for("lista_vendas"))
+        
+    except Exception as e:
+        flash(f"Erro na sincronização: {str(e)}", "danger")
+        import traceback
+        traceback.print_exc()
+        return redirect(url_for("ml_sincronizar_view"))
 
 
 if __name__ == "__main__":

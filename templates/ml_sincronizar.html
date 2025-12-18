@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}Sincronizar Vendas ML - MetriFy ERP{% endblock %}
+
+{% block content %}
+<div class="content-inner">
+  <div class="topbar">
+    <div class="topbar-title">
+      <i class="bi bi-arrow-repeat"></i>
+      Sincronizar Vendas do Mercado Livre
+      <span class="badge bg-success">Automático</span>
+    </div>
+  </div>
+
+  {% if not config or not config.access_token %}
+  <div class="alert alert-warning">
+    <h5 class="alert-heading">
+      <i class="bi bi-exclamation-triangle"></i>
+      Conta não conectada
+    </h5>
+    <p class="mb-0">
+      Você precisa <a href="{{ url_for('ml_configurar') }}" class="alert-link">configurar e conectar</a> sua conta do Mercado Livre primeiro.
+    </p>
+  </div>
+  {% else %}
+
+  <div class="card-glass">
+    <div class="card-glass-header">
+      <div class="card-glass-title">
+        <i class="bi bi-calendar-range"></i>
+        Selecionar Período
+      </div>
+    </div>
+
+    <div class="alert alert-info mb-4">
+      <i class="bi bi-info-circle"></i>
+      Selecione o período de vendas que deseja importar. O sistema buscará automaticamente todas as vendas desse período direto da API do Mercado Livre.
+    </div>
+
+    <form method="POST" action="{{ url_for('ml_sincronizar') }}">
+      <div class="row mb-4">
+        <div class="col-md-6">
+          <label for="data_inicio" class="form-label fw-bold">
+            <i class="bi bi-calendar-check"></i>
+            Data Início
+          </label>
+          <input 
+            type="date" 
+            class="form-control" 
+            id="data_inicio" 
+            name="data_inicio" 
+            value="{{ (now - timedelta(days=30)).strftime('%Y-%m-%d') }}"
+            required
+          >
+        </div>
+        <div class="col-md-6">
+          <label for="data_fim" class="form-label fw-bold">
+            <i class="bi bi-calendar-x"></i>
+            Data Fim
+          </label>
+          <input 
+            type="date" 
+            class="form-control" 
+            id="data_fim" 
+            name="data_fim" 
+            value="{{ now.strftime('%Y-%m-%d') }}"
+            required
+          >
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-success btn-lg">
+        <i class="bi bi-cloud-download"></i>
+        Sincronizar Vendas
+      </button>
+    </form>
+  </div>
+
+  <div class="card-glass">
+    <div class="card-glass-header">
+      <div class="card-glass-title">
+        <i class="bi bi-info-circle"></i>
+        Como Funciona
+      </div>
+    </div>
+
+    <ul class="mb-0">
+      <li>🔄 Busca vendas automaticamente via API do Mercado Livre</li>
+      <li>🎯 Vincula vendas aos produtos pelo SKU ou título</li>
+      <li>📦 Atualiza estoque automaticamente</li>
+      <li>💰 Calcula margens e comissões</li>
+      <li>⚡ Sem necessidade de arquivos Excel</li>
+    </ul>
+  </div>
+
+  <div class="card-glass">
+    <div class="card-glass-header">
+      <div class="card-glass-title text-success">
+        <i class="bi bi-check-circle"></i>
+        Status da Conexão
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="p-3 bg-light rounded">
+          <div class="fw-bold text-muted mb-1">User ID</div>
+          <div class="h5 mb-0">{{ config.user_id }}</div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="p-3 bg-light rounded">
+          <div class="fw-bold text-muted mb-1">Token Válido Até</div>
+          <div class="h5 mb-0">{{ config.token_expira[:10] if config.token_expira else 'N/A' }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% endif %}
+</div>
+{% endblock %}

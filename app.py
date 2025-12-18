@@ -621,21 +621,28 @@ def importar_vendas_ml(caminho_arquivo, engine: Engine):
             margem_contribuicao = receita_liquida - custo_total
             numero_venda_ml = str(row.get("N.º de venda"))
             estado = None
-            for col in ["UF", "Estado", "Estado do comprador", "Estado do Cliente"]:
-                if col in df.columns and row.get(col):
-                    estado_raw = row.get(col)
-                    sigla = normalize_uf(estado_raw)
-                    if sigla and isinstance(sigla, str) and len(sigla) == 2:
-                        estado = sigla
-                    else:
-                        # fallback: tentar extrair apenas letras e pegar primeiras 2
-                        import re
-                        letters = re.sub(r'[^A-Za-z]', '', str(estado_raw))
-                        if len(letters) >= 2:
-                            estado = letters[:2].upper()
-                        else:
-                            estado = None
+            
+            # Procurar coluna de estado/UF de forma mais flexível (case-insensitive)
+            col_estado = None
+            for col in df.columns:
+                col_lower = str(col).lower().strip()
+                if any(term in col_lower for term in ["estado", "uf", "state", "state do cliente", "estado do comprador"]):
+                    col_estado = col
                     break
+            
+            if col_estado and row.get(col_estado):
+                estado_raw = row.get(col_estado)
+                sigla = normalize_uf(estado_raw)
+                if sigla and isinstance(sigla, str) and len(sigla) == 2:
+                    estado = sigla
+                else:
+                    # fallback: tentar extrair apenas letras e pegar primeiras 2
+                    import re
+                    letters = re.sub(r'[^A-Za-z]', '', str(estado_raw))
+                    if len(letters) >= 2:
+                        estado = letters[:2].upper()
+                    else:
+                        estado = None
 
             conn.execute(
                 insert(vendas).values(

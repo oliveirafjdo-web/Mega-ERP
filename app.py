@@ -2282,17 +2282,20 @@ def limpar_dados():
 
 def get_ml_config():
     """Retorna configurações do Mercado Livre"""
-    with engine.connect() as conn:
-        config = conn.execute(select(configuracoes)).mappings().first()
-        if config:
-            return {
-                'client_id': config.get('ml_client_id'),
-                'client_secret': config.get('ml_client_secret'),
-                'access_token': config.get('ml_access_token'),
-                'refresh_token': config.get('ml_refresh_token'),
-                'token_expira': config.get('ml_token_expira'),
-                'user_id': config.get('ml_user_id'),
-            }
+    try:
+        with engine.connect() as conn:
+            config = conn.execute(select(configuracoes)).mappings().first()
+            if config:
+                return {
+                    'client_id': config.get('ml_client_id'),
+                    'client_secret': config.get('ml_client_secret'),
+                    'access_token': config.get('ml_access_token'),
+                    'refresh_token': config.get('ml_refresh_token'),
+                    'token_expira': config.get('ml_token_expira'),
+                    'user_id': config.get('ml_user_id'),
+                }
+    except Exception as e:
+        print(f"Erro ao buscar config ML: {e}")
     return None
 
 def save_ml_tokens(access_token, refresh_token, expires_in, user_id):
@@ -2391,17 +2394,21 @@ def ml_configurar():
 @login_required
 def ml_conectar():
     """Redireciona para OAuth do Mercado Livre"""
-    config = get_ml_config()
-    if not config or not config['client_id']:
-        flash("Configure as credenciais primeiro", "warning")
+    try:
+        config = get_ml_config()
+        if not config or not config.get('client_id'):
+            flash("Configure as credenciais primeiro", "warning")
+            return redirect(url_for("ml_configurar"))
+        
+        redirect_uri = url_for("ml_callback", _external=True)
+        auth_url = (
+            f"https://auth.mercadolivre.com.br/authorization?"
+            f"response_type=code&client_id={config['client_id']}&redirect_uri={redirect_uri}"
+        )
+        return redirect(auth_url)
+    except Exception as e:
+        flash(f"Erro ao conectar: {str(e)}", "danger")
         return redirect(url_for("ml_configurar"))
-    
-    redirect_uri = url_for("ml_callback", _external=True)
-    auth_url = (
-        f"https://auth.mercadolivre.com.br/authorization?"
-        f"response_type=code&client_id={config['client_id']}&redirect_uri={redirect_uri}"
-    )
-    return redirect(auth_url)
 
 
 @app.route("/ml_callback")

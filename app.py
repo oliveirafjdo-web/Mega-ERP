@@ -345,17 +345,19 @@ def init_db():
         try:
             cols = [c["name"] for c in insp.get_columns("produtos")]
             if "criado_automaticamente" not in cols:
-                conn.execute(text('ALTER TABLE produtos ADD COLUMN criado_automaticamente VARCHAR(10) DEFAULT "false"'))
-        except Exception:
-            pass
+                conn.execute(text("ALTER TABLE produtos ADD COLUMN criado_automaticamente VARCHAR(10) DEFAULT 'false'"))
+                print("[MIGRATION] Coluna criado_automaticamente criada")
+        except Exception as e:
+            print(f"[MIGRATION] Erro ao criar criado_automaticamente: {e}")
 
         # produtos.vinculado_a
         try:
             cols = [c["name"] for c in insp.get_columns("produtos")]
             if "vinculado_a" not in cols:
-                conn.execute(text('ALTER TABLE produtos ADD COLUMN vinculado_a INTEGER'))
-        except Exception:
-            pass
+                conn.execute(text("ALTER TABLE produtos ADD COLUMN vinculado_a INTEGER"))
+                print("[MIGRATION] Coluna vinculado_a criada")
+        except Exception as e:
+            print(f"[MIGRATION] Erro ao criar vinculado_a: {e}")
 
 
 # --------------------------------------------------------------------
@@ -2627,17 +2629,34 @@ def ml_sincronizar():
                         # 4. Criar produto automaticamente se não encontrar
                         if not produto_row:
                             print(f"➕ Criando produto automaticamente - Título: {titulo[:80]}")
-                            result = conn.execute(
-                                insert(produtos).values(
-                                    nome=titulo,
-                                    sku=None,
-                                    custo_unitario=0,
-                                    preco_venda_sugerido=0,
-                                    estoque_inicial=0,
-                                    estoque_atual=0,
-                                    criado_automaticamente='true'
+                            try:
+                                result = conn.execute(
+                                    insert(produtos).values(
+                                        nome=titulo,
+                                        sku=None,
+                                        custo_unitario=0,
+                                        preco_venda_sugerido=0,
+                                        estoque_inicial=0,
+                                        estoque_atual=0,
+                                        criado_automaticamente='true'
+                                    )
                                 )
-                            )
+                            except Exception as e:
+                                # Se a coluna não existir, criar sem ela
+                                if "criado_automaticamente" in str(e):
+                                    print(f"⚠️ Coluna criado_automaticamente não existe, criando sem ela")
+                                    result = conn.execute(
+                                        insert(produtos).values(
+                                            nome=titulo,
+                                            sku=None,
+                                            custo_unitario=0,
+                                            preco_venda_sugerido=0,
+                                            estoque_inicial=0,
+                                            estoque_atual=0
+                                        )
+                                    )
+                                else:
+                                    raise
                             produto_id = result.inserted_primary_key[0]
                             produto_row = {
                                 'id': produto_id,
@@ -2820,17 +2839,34 @@ def ml_sincronizar_hoje():
                         # 4. Criar produto automaticamente se não encontrar
                         if not produto_row:
                             print(f"➕ Criando produto automaticamente - Título: {titulo[:80]}")
-                            result = conn.execute(
-                                insert(produtos).values(
-                                    nome=titulo,
-                                    sku=None,
-                                    custo_unitario=0,
-                                    preco_venda_sugerido=0,
-                                    estoque_inicial=0,
-                                    estoque_atual=0,
-                                    criado_automaticamente='true'
+                            try:
+                                result = conn.execute(
+                                    insert(produtos).values(
+                                        nome=titulo,
+                                        sku=None,
+                                        custo_unitario=0,
+                                        preco_venda_sugerido=0,
+                                        estoque_inicial=0,
+                                        estoque_atual=0,
+                                        criado_automaticamente='true'
+                                    )
                                 )
-                            )
+                            except Exception as e:
+                                # Se a coluna não existir, criar sem ela
+                                if "criado_automaticamente" in str(e):
+                                    print(f"⚠️ Coluna criado_automaticamente não existe, criando sem ela")
+                                    result = conn.execute(
+                                        insert(produtos).values(
+                                            nome=titulo,
+                                            sku=None,
+                                            custo_unitario=0,
+                                            preco_venda_sugerido=0,
+                                            estoque_inicial=0,
+                                            estoque_atual=0
+                                        )
+                                    )
+                                else:
+                                    raise
                             produto_id = result.inserted_primary_key[0]
                             produto_row = {
                                 'id': produto_id,

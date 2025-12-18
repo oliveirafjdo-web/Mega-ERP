@@ -38,7 +38,23 @@ app.secret_key = os.environ.get("SECRET_KEY", "metrifypremium-secret")
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-engine: Engine = create_engine(DATABASE_URL, future=True)
+# Configuração do engine com pool settings para Render (melhor tratamento de SSL/conexão)
+if raw_db_url:
+    engine: Engine = create_engine(
+        DATABASE_URL,
+        future=True,
+        pool_pre_ping=True,  # Verifica conexão antes de usar
+        pool_recycle=3600,   # Recicla conexões a cada 1h
+        pool_size=5,         # Máximo 5 conexões simultâneas
+        max_overflow=2,      # Até 2 conexões extras se necessário
+        connect_args={
+            'connect_timeout': 10,
+            'options': '-c statement_timeout=30000'  # 30s timeout por query
+        }
+    )
+else:
+    engine: Engine = create_engine(DATABASE_URL, future=True)
+
 metadata = MetaData()
 
 # Inicializa Flask-Login e Bcrypt

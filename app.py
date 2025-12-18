@@ -2700,7 +2700,14 @@ def ml_sincronizar():
         
         while vendas_importadas < MAX_VENDAS:
             params['offset'] = offset
-            response = requests.get(url, params=params, headers=headers)
+            try:
+                response = requests.get(url, params=params, headers=headers, timeout=30)
+            except requests.Timeout:
+                flash("⏱️ Timeout ao buscar vendas do ML. Tente novamente.", "warning")
+                break
+            except requests.RequestException as e:
+                flash(f"❌ Erro de conexão: {str(e)}", "danger")
+                break
             
             if response.status_code != 200:
                 flash(f"Erro ao buscar vendas: {response.text}", "danger")
@@ -2913,7 +2920,14 @@ def ml_sincronizar_hoje():
         
         while True:
             params['offset'] = offset
-            response = requests.get(url, params=params, headers=headers)
+            try:
+                response = requests.get(url, params=params, headers=headers, timeout=30)
+            except requests.Timeout:
+                flash("⏱️ Timeout ao buscar vendas do ML. Tente novamente.", "warning")
+                break
+            except requests.RequestException as e:
+                flash(f"❌ Erro de conexão: {str(e)}", "danger")
+                break
             
             if response.status_code != 200:
                 flash(f"Erro ao buscar vendas: {response.text}", "danger")

@@ -43,13 +43,20 @@ if raw_db_url:
     engine: Engine = create_engine(
         DATABASE_URL,
         future=True,
-        pool_pre_ping=True,  # Verifica conexão antes de usar
-        pool_recycle=3600,   # Recicla conexões a cada 1h
-        pool_size=5,         # Máximo 5 conexões simultâneas
-        max_overflow=2,      # Até 2 conexões extras se necessário
+        pool_pre_ping=True,          # Verifica conexão antes de usar
+        pool_recycle=300,             # Recicla conexões a cada 5min (mais agressivo)
+        pool_size=3,                  # Reduzir pool (Render Free tem limites)
+        max_overflow=1,               # Até 1 conexão extra
+        pool_timeout=30,              # Timeout ao esperar conexão do pool
+        echo_pool='debug',            # Log de debug do pool (remover em produção)
         connect_args={
             'connect_timeout': 10,
-            'options': '-c statement_timeout=30000'  # 30s timeout por query
+            'keepalives': 1,
+            'keepalives_idle': 30,
+            'keepalives_interval': 10,
+            'keepalives_count': 5,
+            'sslmode': 'require',     # Força SSL mas não valida certificado
+            'options': '-c statement_timeout=30000'
         }
     )
 else:
@@ -107,6 +114,24 @@ if raw_db_url:
     except Exception as e:
         print(f"⚠️ Migração: {e}")
 
+# Helper para retry em operações de banco (SSL intermitente)
+def db_retry(func, max_attempts=3):
+    """Executa função com retry em caso de erro SSL/conexão"""
+    import time
+    from sqlalchemy.exc import OperationalError
+    
+    for attempt in range(max_attempts):
+        try:
+            return func()
+        except OperationalError as e:
+            if 'SSL' in str(e) or 'connection' in str(e).lower():
+                if attempt < max_attempts - 1:
+                    print(f"⚠️ Erro SSL (tentativa {attempt + 1}/{max_attempts}), retry em 1s...")
+                    time.sleep(1)
+                    continue
+            raise
+    return None
+
 # Classe User para Flask-Login
 class User(UserMixin):
     def __init__(self, id, username, password_hash):
@@ -116,19 +141,23 @@ class User(UserMixin):
 
     @staticmethod
     def get_by_username(username):
-        with engine.connect() as conn:
-            row = conn.execute(select(usuarios).where(usuarios.c.username == username)).mappings().first()
-            if row:
-                return User(row["id"], row["username"], row["password_hash"])
-        return None
+        def _query():
+            with engine.connect() as conn:
+                row = conn.execute(select(usuarios).where(usuarios.c.username == username)).mappings().first()
+                if row:
+                    return User(row["id"], row["username"], row["password_hash"])
+            return None
+        return db_retry(_query)
 
     @staticmethod
     def get(user_id):
-        with engine.connect() as conn:
-            row = conn.execute(select(usuarios).where(usuarios.c.id == user_id)).mappings().first()
-            if row:
-                return User(row["id"], row["username"], row["password_hash"])
-        return None
+        def _query():
+            with engine.connect() as conn:
+                row = conn.execute(select(usuarios).where(usuarios.c.id == user_id)).mappings().first()
+                if row:
+                    return User(row["id"], row["username"], row["password_hash"])
+            return None
+        return db_retry(_query)
 
 @login_manager.user_loader
 def load_user(user_id):

@@ -981,8 +981,10 @@ def editar_produto(produto_id):
 
 @app.route("/produtos/<int:produto_id>/excluir", methods=["POST"])
 def excluir_produto(produto_id):
+    """Deleta um produto (apenas se não tiver vendas)"""
     try:
-        with engine.begin() as conn:
+        # Verificação FORA da transação
+        with engine.connect() as conn:
             # Verificar se o produto existe
             produto = conn.execute(
                 select(produtos).where(produtos.c.id == produto_id)
@@ -996,18 +998,20 @@ def excluir_produto(produto_id):
             vendas_count = conn.execute(
                 select(func.count()).select_from(vendas)
                 .where(vendas.c.produto_id == produto_id)
-            ).scalar()
+            ).scalar() or 0
             
             if vendas_count > 0:
                 flash(f"❌ Não é possível deletar este produto! Existem {vendas_count} vendas vinculadas a ele. "
-                      f"Delete as vendas primeiro ou use a opção de deletar produto + vendas.", "danger")
+                      f"Use a opção 'Deletar produto + vendas' se desejar remover tudo.", "danger")
                 return redirect(url_for("editar_produto", produto_id=produto_id))
-            
-            # Deletar o produto se não houver vendas
+        
+        # Agora deleta se passou na verificação
+        with engine.begin() as conn:
             conn.execute(delete(produtos).where(produtos.c.id == produto_id))
             flash(f"✅ Produto '{produto['nome']}' excluído com sucesso.", "success")
     except Exception as e:
-        flash(f"❌ Erro ao excluir produto: {e}", "danger")
+        flash(f"❌ Erro ao excluir produto: {str(e)}", "danger")
+        print(f"[ERROR] Erro ao excluir produto {produto_id}: {e}")
     
     return redirect(url_for("lista_produtos"))
 
@@ -1016,7 +1020,8 @@ def excluir_produto(produto_id):
 def excluir_produto_com_vendas(produto_id):
     """Deleta o produto E todas as suas vendas associadas"""
     try:
-        with engine.begin() as conn:
+        # Verificação e contagem FORA da transação
+        with engine.connect() as conn:
             # Verificar se o produto existe
             produto = conn.execute(
                 select(produtos).where(produtos.c.id == produto_id)
@@ -1030,8 +1035,10 @@ def excluir_produto_com_vendas(produto_id):
             vendas_count = conn.execute(
                 select(func.count()).select_from(vendas)
                 .where(vendas.c.produto_id == produto_id)
-            ).scalar()
-            
+            ).scalar() or 0
+        
+        # Deletar vendas primeiro, depois o produto (transação)
+        with engine.begin() as conn:
             # Deletar vendas vinculadas
             if vendas_count > 0:
                 conn.execute(delete(vendas).where(vendas.c.produto_id == produto_id))
@@ -1039,10 +1046,11 @@ def excluir_produto_com_vendas(produto_id):
             
             # Deletar o produto
             conn.execute(delete(produtos).where(produtos.c.id == produto_id))
-            
-            flash(f"✅ Produto '{produto['nome']}' e {vendas_count} vendas deletadas com sucesso.", "success")
+        
+        flash(f"✅ Produto '{produto['nome']}' e {vendas_count} vendas deletadas com sucesso.", "success")
     except Exception as e:
-        flash(f"❌ Erro ao excluir: {e}", "danger")
+        flash(f"❌ Erro ao excluir: {str(e)}", "danger")
+        print(f"[ERROR] Erro ao excluir produto {produto_id} com vendas: {e}")
     
     return redirect(url_for("lista_produtos"))
 

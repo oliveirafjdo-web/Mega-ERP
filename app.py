@@ -58,6 +58,27 @@ usuarios = Table(
 # Criar todas as tabelas no banco de dados
 metadata.create_all(engine)
 
+# Migração: adicionar colunas ML (PostgreSQL)
+if raw_db_url:
+    try:
+        with engine.begin() as conn:
+            alteracoes = [
+                "ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS ml_client_id VARCHAR(255)",
+                "ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS ml_client_secret VARCHAR(255)",
+                "ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS ml_access_token VARCHAR(500)",
+                "ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS ml_refresh_token VARCHAR(500)",
+                "ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS ml_token_expira VARCHAR(50)",
+                "ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS ml_user_id VARCHAR(100)",
+            ]
+            for sql in alteracoes:
+                try:
+                    conn.execute(text(sql))
+                except Exception:
+                    pass
+        print("✅ Migração ML concluída")
+    except Exception as e:
+        print(f"⚠️ Migração: {e}")
+
 # Classe User para Flask-Login
 class User(UserMixin):
     def __init__(self, id, username, password_hash):

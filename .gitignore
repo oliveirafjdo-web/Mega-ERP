@@ -1,4 +1,19 @@
-# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+ENV/
+env/
+.env
+metrifiy.db
+backups/
+uploads/
+*.sqlite3
+*.egg-info/
+.pytest_cache/
+node_modules/
+dist/
+build/# Python
 __pycache__/
 *.py[cod]
 *$py.class

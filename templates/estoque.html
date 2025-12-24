@@ -87,23 +87,35 @@
 
         <input id="filtroBusca"
                type="text"
-               placeholder="Filtrar por nome ou SKU..."
+               placeholder="🔍 Filtrar por nome ou SKU..."
                class="input input-bordered w-full md:w-80"
                onkeyup="filtrarTabela()">
 
         <div class="flex flex-wrap gap-2">
-            <button class="btn btn-sm" onclick="filtrarStatus('todos')">Todos</button>
-            <button class="btn btn-sm btn-success" onclick="filtrarStatus('ok')">OK</button>
-            <button class="btn btn-sm btn-warning" onclick="filtrarStatus('repor')">Repor</button>
-            <button class="btn btn-sm btn-error" onclick="filtrarStatus('sem')">Sem estoque</button>
-            <button class="btn btn-sm btn-info" onclick="filtrarSugestaoMes()">Sugestão mês</button>
+            <button class="btn btn-sm btn-outline" onclick="filtrarStatus('todos')">
+                📋 Todos
+            </button>
+            <button class="btn btn-sm btn-success" onclick="filtrarStatus('ok')">
+                ✅ OK
+            </button>
+            <button class="btn btn-sm btn-warning" onclick="filtrarStatus('repor')">
+                ⚠️ Repor
+            </button>
+            <button class="btn btn-sm btn-error" onclick="filtrarStatus('sem')">
+                ❌ Sem estoque
+            </button>
+            <button class="btn btn-sm btn-info" onclick="filtrarSugestaoMes()">
+                📊 Sugestão mês
+            </button>
         </div>
 
     </div>
 
     <!-- ===================== BOTÃO AJUSTAR ESTOQUE ===================== -->
     <div class="mb-4">
-        <a href="/estoque/ajuste" class="btn btn-warning btn-lg">Ajustar estoque</a>
+        <a href="/estoque/ajuste" class="btn btn-warning">
+            ⚙️ Ajustar Estoque
+        </a>
     </div>
 
     <!-- ===================== TABELA ===================== -->
